@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
     pp(euler_error)(f, h=0.1, t=1, iv=(0, 1), method=euler_trapezoid)
 
-def RKF45_step(f, t_i, w_i, h){
+def RKF45_step(f, t_i, w_i, h):
     wm = [ 
         [0, 0]
         [1/4, 1/4],
@@ -159,10 +159,11 @@ def RKF45_step(f, t_i, w_i, h){
         [1, 439/216, -8, 3680/513, -845/4104],
         [1/2, -8/27, 2, -3544/2565, 1859/4104, -11/40]
     ]
-    s = []
+
+    s = []
+
     for i in range(0, 6):
         s_sum = 0
         for j in range(0, i):
             s_sum += wm[i][1 + j] * h * s[j]
         s[i] = f(t_i * wm[i][0] * h, w_i + s_sum)
-}
