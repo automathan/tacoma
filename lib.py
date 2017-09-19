@@ -3,6 +3,7 @@ from inspect import signature
 from IPython.display import display
 
 import sympy as sp
+import numpy as np
 
 #
 # General
@@ -104,11 +105,48 @@ def euler_trapezoid(f, h, t):
     return trapezoid
 
 
+def euler_midpoint(f, h, t):
+    def midpoint(w, i):
+        t_i = t(i-1)
+        w_n = f(t_i, w)
+        return w + h*f(t_i+h/2, w + h*w_n/2)
+
+    return midpoint
+
+
+def euler_rk4(f, h, t):
+    def rk4(w, i):
+        t_i = t(i-1)
+
+        s1 = f(t_i, w)
+        s2 = f(t_i + (h / 2), w + (h / 2) * s1)
+        s3 = f(t_i + (h / 2), w + (h / 2) * s2)
+        s4 = f(t_i + h, w + h * s3)
+        return w + (h / 6) * (s1 + 2 * s2 + 2 * s3 + s4)
+
+    return rk4
+
+
+def euler_rk_felberg45():
+    def method(t, y):
+        pass
+
+    return method
+
+
+@disallow_none_kwargs
+def variable_euler(f, t=None, iv=None, method=euler_rk_felberg45, tolerance=1e-3):
+    def acceptable_error(e, w):
+        return e/np.abs(w) < tolerance
+
+
+
+
 @disallow_none_kwargs
 def euler(f, h=1, t=None, iv=None, method=euler_normal):
     fro, to = iv[0], t
 
-    n = (to - fro) / h
+    n = (to - fro) / h  # type: float
     if not (n.is_integer() and n > 0):
         raise Exception("Number of iterations must be a positive integer.")
 
@@ -149,21 +187,3 @@ if __name__ == '__main__':
     f = lambda t, y: t
 
     pp(euler_error)(f, h=0.1, t=1, iv=(0, 1), method=euler_trapezoid)
-
-def RKF45_step(f, t_i, w_i, h):
-    wm = [ 
-        [0, 0]
-        [1/4, 1/4],
-        [3/8, 3/32, 9/32],
-        [12/13, 1932/2197, -7200/2197, 7296/2197],
-        [1, 439/216, -8, 3680/513, -845/4104],
-        [1/2, -8/27, 2, -3544/2565, 1859/4104, -11/40]
-    ]
-
-    s = []
-
-    for i in range(0, 6):
-        s_sum = 0
-        for j in range(0, i):
-            s_sum += wm[i][1 + j] * h * s[j]
-        s[i] = f(t_i * wm[i][0] * h, w_i + s_sum)
