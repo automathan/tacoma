@@ -41,8 +41,6 @@ class Bridge:
         self.left, = ax.plot(a, self.a_t)
         self.right, = ax.plot(b, self.b_t)
 
-        print(type(self.left))
-
     def lines(self, y, theta):
         a = (self.len * np.cos(theta), self.len * np.sin(theta) - y)
         b = (-self.len * np.cos(theta), -self.len * np.sin(theta) - y)
@@ -75,10 +73,10 @@ if __name__ == '__main__':
 
     def update(fr, *args):
         y = fr['w']
+        print(fr['error'])
         return br.lines(y[0, 0], y[2, 0])
 
-    results = lib.euler(problems.tacoma(W=80, l=l), h=0.2, t=1000, iv=(0, iv), method=lib.euler_rk4)
-    # frs = list(results)
+    results = lib.variable_euler(problems.tacoma(W=80, l=l), t=1000, iv=(0, iv), tolerance=1e-5)
 
     anim = animation.FuncAnimation(fig, update, frames=smooth_time(results, playback_speed=20), interval=1)
     plt.show()

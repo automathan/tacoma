@@ -1,6 +1,8 @@
 from functools import wraps
+import itertools
 from inspect import signature
 from IPython.display import display
+import matplotlib.pyplot as plt
 
 import sympy as sp
 import numpy as np
@@ -75,6 +77,20 @@ def with_error(results, y, x_key='x', y_key='y'):
         yield {**result, "error": abs(y(result[x_key]) - result[y_key])}
 
 
+def plot_gen(results, y_keys=None, x_keys=None):
+    ys = [[] for _ in y_keys]
+    xs = [[] for _ in x_keys]
+
+    for result in results:
+        for key, y in zip(y_keys, ys):
+            y.append(result[key])
+
+        for key, x in zip(x_keys, xs):
+            x.append(result[key])
+
+    for y, x in zip(ys, xs):
+        plt.plot(x, y)
+
 #
 # ODE, Euler
 #
@@ -127,19 +143,114 @@ def euler_rk4(f, h, t):
     return rk4
 
 
-def euler_rk_felberg45():
-    def method(t, y):
-        pass
+def rkf45():
+    s_coefficients = np.array([
+        0, 1/4, 3/8, 12/13, 1, 1/2
+    ])
 
-    return method
+    tableau = [
+        [],
+        [1 / 4],
+        [3 / 32, 9 / 32],
+        [1932 / 2197, -7200 / 2197, 7296 / 2197],
+        [439 / 216, -8, 3680 / 513, -845 / 4104],
+        [-8 / 27, 2, -3544 / 2565, 1859 / 4104, -11 / 40]
+    ]
+
+    m45 = np.array([
+        [16 / 135, 0, 6656 / 12825, 28561 / 56430, -9 / 50, 2 / 55],
+        [25 / 216, 0, 1408 / 2565, 2197 / 4104, -1 / 5]
+    ])
+
+    return rk_embedded_pair(s_coefficients, tableau, m45)
+
+
+def sacalar(y):
+    return y if np.isscalar(y) else np.linalg.norm(y, ord=2)
+
+
+def rk_embedded_pair(s_coefficients, tableau, orders_coefficients):
+    for i, row in enumerate(tableau):
+        assert len(row) == i, f"The {i}. row in tableau must have an length of {i}"
+        assert np.abs(sum(row) - s_coefficients[i]) < 1e-10, f"The coefficients in tableau row {i} must sum to its assosiated s coefficiant."
+
+    for row in orders_coefficients:
+        assert np.abs(sum(row) - 1) < 1e-10, "The coefficients in the order methods must sum to 1."
+
+    assert len(orders_coefficients) == 2, "There may only be 2 embedded rk methods."
+    assert len(s_coefficients) == len(tableau), "The tableau must have # of rows equal to the length of the s coefficient vector."
+    assert len(s_coefficients) == len(orders_coefficients[0]), "The last order method must have the same number of coefficients as the s coefficient vector."
+    assert len(orders_coefficients[0]) - 1 == len(orders_coefficients[1]), "The second order method may currently only be one order less than the first."
+
+    def step_generator(f, to_scalar=sacalar):
+        s = [0.0 for _ in s_coefficients]
+
+        def step(h, t, y):
+            def slope(coefficients):
+                return sum(c * h * s_i for s_i, c in zip(s, coefficients))
+
+            for i in range(len(s)):
+                s[i] = f(t + s_coefficients[i] * h, y + slope(tableau[i]))
+
+            a_w = slope(orders_coefficients[1])
+            a_z = slope(orders_coefficients[0])
+
+            return y + a_z, np.abs(to_scalar(a_w - a_z)), y + a_w
+
+        return step, len(s) - 1
+    return step_generator
 
 
 @disallow_none_kwargs
-def variable_euler(f, t=None, iv=None, method=euler_rk_felberg45, tolerance=1e-3):
-    def acceptable_error(e, w):
-        return e/np.abs(w) < tolerance
+def variable_euler(f, t=None, iv=None, method=rkf45(), tolerance=1e-14, start_h=0.1, safety_factor=0.8, to_scalar=sacalar, fps=False):
+    if fps is not False:
+        minh = 1/fps
+    else:
+        minh = 2**32
 
+    t_goal = t
 
+    def acceptable_error(e, w, magnification=1):
+        return e/to_scalar(w) < tolerance/magnification
+
+    step, p = method(f, to_scalar=to_scalar)
+    t = iv[0]
+    w = iv[1]
+    h = start_h
+
+    r = 1/(p+1)
+    f = safety_factor * tolerance**r
+
+    yield dict(i=0, t=t, w=w, fourth=w, h=0, error=0)
+
+    _, e, _ = step(h, t, w)
+    h = f * h * (to_scalar(w) / max(e, 1e-20)) ** r
+
+    for i in itertools.count(1):
+        if t + h >= t_goal - 1e-16:
+            h = t_goal - t
+
+            w, e, z = step(h, t, w)
+            yield dict(i=i, t=t_goal, w=w, fourth=z, h=h, error=e)
+            break
+
+        h = min(h, minh)
+        w_next, e, z = step(h, t, w)
+
+        if not acceptable_error(e, w):
+            h = f * h * (to_scalar(w) / max(e, 1e-20)) ** r
+
+            w_next, e, z = step(h, t, w)
+
+            while not acceptable_error(e, w):
+                h /= 2
+
+                w_next, e, z = step(h, t, w)
+
+        t += h
+        w = w_next
+        yield dict(i=i, t=t, w=w, fourth=z, h=h, error=e)
+        h = f * h * (to_scalar(w) / max(e, 1e-20)) ** r
 
 
 @disallow_none_kwargs
@@ -184,6 +295,7 @@ def euler_error(f, iv=None, multiple_eqs_strategy=lambda eqs: eqs[0], **kwargs):
     return with_error(euler(f, iv=iv, **kwargs), y_fn, x_key='t', y_key='w')
 
 if __name__ == '__main__':
-    f = lambda t, y: t
+    f = lambda t, y: t*y+t**3
 
-    pp(euler_error)(f, h=0.1, t=1, iv=(0, 1), method=euler_trapezoid)
+    pp(variable_euler)(f, t=1, iv=(0, 1), tolerance=1e-10)
+    pp(euler_error)(f, h=0.1, t=1, iv=(0, 1), method=euler_rk4)
