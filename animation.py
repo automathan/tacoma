@@ -59,7 +59,7 @@ if __name__ == '__main__':
     import problems
 
     iv = np.matrix([
-        [1],
+        [0],
         [0],
         [0.001],
         [0]
@@ -73,10 +73,10 @@ if __name__ == '__main__':
 
     def update(fr, *args):
         y = fr['w']
-        print(fr['error'])
+        # print(fr['w'][0, 0])
         return br.lines(y[0, 0], y[2, 0])
 
-    results = lib.variable_euler(problems.tacoma(W=80, l=l), t=1000, iv=(0, iv), tolerance=1e-5)
+    results = lib.variable_euler(problems.tacoma(W=78.96, l=l), t=1000, iv=(0, iv), tolerance=1e-5)
 
     anim = animation.FuncAnimation(fig, update, frames=smooth_time(results, playback_speed=20), interval=1)
     plt.show()

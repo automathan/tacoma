@@ -92,6 +92,22 @@ def plot_gen(results, y_keys=None, x_keys=None):
         plt.plot(x, y)
 
 #
+# Optimization
+#
+
+
+def secant_method(f, x_1, x_2, tolerance=0.5e-3, y=0):
+    x_previous = x_1
+    x_current = x_2
+    f_current = f(x_previous) - y
+
+    while np.abs(x_previous - x_current) > tolerance:
+        f_current, f_previous = f(x_current) - y, f_current
+        x_previous, x_current = x_current, x_current - f_current * (x_current - x_previous) / (f_current - f_previous)
+
+    return x_current
+
+#
 # ODE, Euler
 #
 
