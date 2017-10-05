@@ -1,10 +1,6 @@
-from functools import wraps
 import itertools
-from inspect import signature
-from IPython.display import display
 import matplotlib.pyplot as plt
 
-import sympy as sp
 import numpy as np
 
 
@@ -20,72 +16,9 @@ import numpy as np
 
 # General functions
 #
-# The first seven following functions are not directly related to the project 
+# The following function is not directly related to the project
 # but rather convenience functions to make the rest of the code more readable
-
-def disallow_none_kwargs(f):
-    required_kwargs = []
-    for param in signature(f).parameters.values():
-        if param.default is None:
-            required_kwargs.append(param.name)
-
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        for kwarg in required_kwargs:
-            if not kwarg in kwargs:
-                raise Exception(f"Keyword argument {kwarg} is required.")
-
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def stringify(value):
-    if isinstance(value, float):
-        return str(value if not value.is_integer() else int(value))
-    else:
-        return str(value)
-
-
-def pp_table(table, v_sep='|', h_sep='-', cross_sep='+'):
-    just = []
-    for key, col in table.items():
-        just.append(max(len(stringify(key)), *(len(stringify(cell)) for cell in col)))
-
-    print(f" {v_sep} ".join(header.ljust(just[i]) for i, header in enumerate(table.keys())))
-    print(f"{h_sep}{cross_sep}{h_sep}".join(h_sep*just[i] for i, _ in enumerate(table.keys())))
-
-    for row in zip(*table.values()):
-        print(f" {v_sep} ".join(stringify(cell).ljust(just[i]) for i, cell in enumerate(row)))
-
-
-def group_dicts(dicts):
-    iterable = iter(dicts)
-    head = next(iterable)
-    keys = head.keys()
-
-    result = {key: [] for key in keys}
-    for key, value in head.items():
-        result[key].append(value)
-
-    for dict in iterable:
-        assert dict.keys() == keys, "Dictionaries must have same shape"
-        for key, value in dict.items():
-            result[key].append(value)
-
-    return result
-
-
-def pp(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        pp_table(group_dicts(fn(*args, **kwargs)))
-
-    return wrapper
-
-
-def with_error(results, y, x_key='x', y_key='y'):
-    for result in results:
-        yield {**result, "error": abs(y(result[x_key]) - result[y_key])}
+# it plots most of our functions.
 
 
 def plot_gen(results, y_keys=None, x_keys=None):
@@ -106,14 +39,22 @@ def plot_gen(results, y_keys=None, x_keys=None):
 # Optimization
 #
 
-# we use the secant method for finding roots when the derivative is unknown (which is the case in this project (when considering the higher order functions))
+
 def secant_method(f, x_1, x_2, tolerance=0.5e-3, y=0):
+    """
+    We use the secant method for finding roots when the
+    derivative is unknown (which is the case in this project (when considering the higher order functions))
+    """
     x_previous = x_1
     x_current = x_2
     f_current = f(x_previous) - y
 
+    # Only stop iterating when the x values are close enough to each other
     while np.abs(x_previous - x_current) > tolerance:
+        # Calculate the new f(x) value and swap the old one into the previous f
         f_current, f_previous = f(x_current) - y, f_current
+
+        # Set the current x according to the secant method, and at the same time swap in current x into previous
         x_previous, x_current = x_current, x_current - f_current * (x_current - x_previous) / (f_current - f_previous)
 
     return x_current
@@ -122,42 +63,34 @@ def secant_method(f, x_1, x_2, tolerance=0.5e-3, y=0):
 # ODE, Euler
 #
 
-def ivp(expr, x, ivs):
-    eqs = (sp.Eq(expr.subs(x, iv[0]), iv[1]) for iv in ivs)
-    free_symbols_solutions = sp.solve(eqs, dict=True)
 
-    if len(free_symbols_solutions) == 0:
-        raise Exception(f"Free symbols in expr has no solutions")
-    elif len(free_symbols_solutions) > 1:
-        raise Exception(f"Free symbols in expr has multiple solutions\n{list(free_symbols_solutions)}")
-
-    return expr.subs(free_symbols_solutions[0])
-
+# The following 4 functions are functions that return the step function for the given method,
+# these are used in the euler function below(passed in as the method parameter).
 
 def euler_normal(f, h, t):
     return lambda w, i: w + h * f(t(i-1), w)
 
 
 def euler_trapezoid(f, h, t):
-    def trapezoid(w, i):
+    def trapezoid_step(w, i):
         t_i = t(i-1)
         w_n = f(t_i, w)
         return w + h*(w_n + f(t_i+h, w + h*w_n))/2
 
-    return trapezoid
+    return trapezoid_step
 
 
 def euler_midpoint(f, h, t):
-    def midpoint(w, i):
+    def midpoint_step(w, i):
         t_i = t(i-1)
         w_n = f(t_i, w)
         return w + h*f(t_i+h/2, w + h*w_n/2)
 
-    return midpoint
+    return midpoint_step
 
 
 def euler_rk4(f, h, t):
-    def rk4(w, i):
+    def rk4_step(w, i):
         t_i = t(i-1)
 
         s1 = f(t_i, w)
@@ -166,16 +99,36 @@ def euler_rk4(f, h, t):
         s4 = f(t_i + h, w + h * s3)
         return w + (h / 6) * (s1 + 2 * s2 + 2 * s3 + s4)
 
-    return rk4
+    return rk4_step
+
+
+def euler(f, h=1, t=None, iv=None, method=euler_normal):
+    fro, to = iv[0], t
+
+    n: float = (to - fro) / h
+    if not (n.is_integer() and n > 0):
+        raise Exception("Number of iterations must be a positive integer.")
+
+    n = int(n)
+
+    t_i = lambda i: fro + i/(1/h)  # Trying to avoid floating point rounding errors
+    step = method(f, h, t_i)
+    w = iv[1]
+    yield dict(i=0, t=t_i(0), w=w)
+
+    for i in range(1, n+1):
+        w = step(w, i)
+
+        yield dict(i=i, t=t_i(i), w=w)
 
 
 def rkf45():
+
     s_coefficients = np.array([
         0, 1/4, 3/8, 12/13, 1, 1/2
     ])
 
     # RK45 coefficient matrix
-
     tableau = [
         [],
         [1 / 4],
@@ -193,7 +146,7 @@ def rkf45():
     return rk_embedded_pair(s_coefficients, tableau, m45)
 
 
-def sacalar(y):
+def scalar(y):
     return y if np.isscalar(y) else np.linalg.norm(y, ord=2)
 
 
@@ -210,12 +163,17 @@ def rk_embedded_pair(s_coefficients, tableau, orders_coefficients):
     assert len(s_coefficients) == len(orders_coefficients[0]), "The last order method must have the same number of coefficients as the s coefficient vector."
     assert len(orders_coefficients[0]) - 1 == len(orders_coefficients[1]), "The second order method may currently only be one order less than the first."
 
-    def step_generator(f, to_scalar=sacalar):
+    def step_generator(f, to_scalar=scalar):
         s = [0.0 for _ in s_coefficients]
 
+        # Define the actual variable step function
         def step(h, t, y):
+            # Define a helper function that captures a very common operation in all rk methods
+            # namely summing up each value in the input vector interleaved with
+            # the s vector. Mathematically speaking we sum
+            # the set [h * c * s_i | (s_i, c_i) ∈ interleave(s, coefficients)]
             def slope(coefficients):
-                return sum(c * h * s_i for s_i, c in zip(s, coefficients))
+                return sum(h * c * s_i for s_i, c in zip(s, coefficients))
 
             for i in range(len(s)):
                 s[i] = f(t + s_coefficients[i] * h, y + slope(tableau[i]))
@@ -223,14 +181,14 @@ def rk_embedded_pair(s_coefficients, tableau, orders_coefficients):
             a_w = slope(orders_coefficients[1])
             a_z = slope(orders_coefficients[0])
 
+            # return a tuple of (5th order z, error estimate, 4th order w)
             return y + a_z, np.abs(to_scalar(a_w - a_z)), y + a_w
 
         return step, len(s) - 1
     return step_generator
 
 
-@disallow_none_kwargs
-def variable_euler(f, t=None, iv=None, method=rkf45(), tolerance=1e-14, start_h=0.1, safety_factor=0.8, to_scalar=sacalar, fps=False):
+def variable_euler(f, t=None, iv=None, method=rkf45(), tolerance=1e-14, start_h=0.1, safety_factor=0.8, to_scalar=scalar, fps=False):
     if fps is not False:
         minh = 1/fps
     else:
@@ -281,49 +239,7 @@ def variable_euler(f, t=None, iv=None, method=rkf45(), tolerance=1e-14, start_h=
         h = f * h * (to_scalar(w) / max(e, 1e-20)) ** r
 
 
-@disallow_none_kwargs
-def euler(f, h=1, t=None, iv=None, method=euler_normal):
-    fro, to = iv[0], t
-
-    n = (to - fro) / h  # type: float
-    if not (n.is_integer() and n > 0):
-        raise Exception("Number of iterations must be a positive integer.")
-
-    n = int(n)
-
-    t_i = lambda i: fro + i/(1/h)  # Trying to avoid floating point rounding errors
-    step = method(f, h, t_i)
-    w = iv[1]
-    yield dict(i=0, t=t_i(0), w=iv[1])
-
-    for i in range(1, n+1):
-        w = step(w, i)
-
-        yield dict(i=i, t=t_i(i), w=w)
-
-
-@disallow_none_kwargs
-def euler_error(f, iv=None, multiple_eqs_strategy=lambda eqs: eqs[0], **kwargs):
-    y = sp.Function('y')
-    t = sp.Symbol('t')
-
-    y_d = sp.Eq(y(t).diff(t), f(t, y(t)))
-    diff_eq = sp.dsolve(y_d)
-
-    if isinstance(diff_eq, list):
-        diff_eq = multiple_eqs_strategy(diff_eq)
-
-    exact = ivp(diff_eq.rhs, t, [iv])
-
-    display(y_d)
-    display(sp.Eq(y(t), exact))
-
-    y_fn = sp.lambdify(t, exact)
-
-    return with_error(euler(f, iv=iv, **kwargs), y_fn, x_key='t', y_key='w')
-
 if __name__ == '__main__':
     f = lambda t, y: t*y+t**3
 
-    pp(variable_euler)(f, t=1, iv=(0, 1), tolerance=1e-10)
-    pp(euler_error)(f, h=0.1, t=1, iv=(0, 1), method=euler_rk4)
+    variable_euler(f, t=1, iv=(0, 1), tolerance=1e-10)
