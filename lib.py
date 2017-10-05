@@ -7,10 +7,21 @@ import matplotlib.pyplot as plt
 import sympy as sp
 import numpy as np
 
-#
-# General
-#
 
+# - - - Appendix Python - - - 
+# In this part we'll highlight some python-specific syntax and functions
+# - Indentation is a syntatic construct providing nesting functionality
+#
+# - "def f(a1, a2=1, ...):" standard function header, where a is for argument, and a2 will have value 1 unless stated otherwise
+#
+# - "raise" and "assert", used for error handling
+# 
+
+
+# General functions
+#
+# The first seven following functions are not directly related to the project 
+# but rather convenience functions to make the rest of the code more readable
 
 def disallow_none_kwargs(f):
     required_kwargs = []
@@ -95,7 +106,7 @@ def plot_gen(results, y_keys=None, x_keys=None):
 # Optimization
 #
 
-
+# we use the secant method for finding roots when the derivative is unknown (which is the case in this project (when considering the higher order functions))
 def secant_method(f, x_1, x_2, tolerance=0.5e-3, y=0):
     x_previous = x_1
     x_current = x_2
@@ -110,7 +121,6 @@ def secant_method(f, x_1, x_2, tolerance=0.5e-3, y=0):
 #
 # ODE, Euler
 #
-
 
 def ivp(expr, x, ivs):
     eqs = (sp.Eq(expr.subs(x, iv[0]), iv[1]) for iv in ivs)
@@ -163,6 +173,8 @@ def rkf45():
     s_coefficients = np.array([
         0, 1/4, 3/8, 12/13, 1, 1/2
     ])
+
+    # RK45 coefficient matrix
 
     tableau = [
         [],
