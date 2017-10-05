@@ -1,3 +1,5 @@
+from itertools import islice
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -71,12 +73,32 @@ if __name__ == '__main__':
     fig = plt.figure(figsize=(8, 8), facecolor='white')
     br = Bridge(l)
 
+    i = 0
     def update(fr, *args):
+        global i
+        i += 1
         y = fr['w']
         # print(fr['w'][0, 0])
         return br.lines(y[0, 0], y[2, 0])
 
-    results = lib.variable_euler(problems.tacoma(W=78.96, l=l), t=1000, iv=(0, iv), tolerance=1e-5)
 
-    anim = animation.FuncAnimation(fig, update, frames=smooth_time(results, playback_speed=20), interval=1)
-    plt.show()
+    # 78.96
+    FFMpegWriter = animation.writers['ffmpeg']
+    writer = FFMpegWriter()
+    results = lib.euler(problems.tacoma(W=80, l=l), t=1000, h=1/24, iv=(0, iv), method=lib.euler_rk4)
+    frame_count = 1000*24
+    anim = animation.FuncAnimation(fig, update, frames=results, interval=100/frame_count, save_count=int(frame_count))
+    anim.save('bridge.mp4', writer=writer)
+    print(i)
+
+    # import time
+    #
+    # start = time.perf_counter()
+    # for result in results:
+    #     pass
+    #
+    # time_taken = time.perf_counter() - start
+    #
+    # print(time_taken)
+    # print(1000 / time_taken)
+    # print("animation finished sucessfully")

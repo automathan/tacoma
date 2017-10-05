@@ -1,5 +1,6 @@
 import functools
 import numpy as np
+import time
 
 import lib
 
@@ -23,9 +24,9 @@ def tacoma(l=6, m=2500, d=0.01, omega=2 * np.pi * (38 / 60), W=0):
     return f
 
 
-def tacoma_over_w(l, t, iv, tolerance, reduce_fn_gen):
+def tacoma_over_w(l, t, iv, tolerance, reduce_fn_gen, d=0.01, omega=2 * np.pi * (38 / 60)):
     def f(W):
-        results = lib.variable_euler(tacoma(W=W, l=l), t=t, iv=(0, iv), tolerance=tolerance)
+        results = lib.variable_euler(tacoma(W=W, l=l, d=d, omega=omega), t=t, iv=(0, iv), tolerance=tolerance)
 
         reduce_fn, initializer = reduce_fn_gen(W)
         return functools.reduce(reduce_fn, results, initializer)
@@ -50,7 +51,6 @@ def tacoma_over_iv_theta(l, t, W, tolerance, reduce_fn_gen):
     return f
 
 if __name__ == '__main__':
-    from matplotlib import pyplot as plt
     l = 6
 
     iv = np.matrix([
@@ -67,12 +67,13 @@ if __name__ == '__main__':
 
         return r, 0
 
-    max_theta = tacoma_over_w(l, 1000, iv, 1e-10, reduce)
-    f = lambda x: max_theta(x) / iv[2, 0]
 
-    print(lib.secant_method(f, 58, 59, y=100, tolerance=1e-10))
+    def over_d(d):
+        max_theta = tacoma_over_w(l, 1000, iv, 1e-8, reduce, d=d)
+        f = lambda x: (max_theta(x) + max_theta(x + 2)) / (2*iv[2, 0])
 
-    # ws = range(-10, -2)
-    #
-    # lib.plot_gen((f(w) for w in ws), x_keys=[0], y_keys=[2])
-    # plt.show()
+        return lib.secant_method(f, 112, 114, y=100, tolerance=0.01)
+
+    start = time.perf_counter()
+    print(lib.secant_method(over_d, 0.03, 0.05, y=113*3.6, tolerance=0.0001))
+    print(time.perf_counter() - start)
