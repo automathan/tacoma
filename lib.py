@@ -171,7 +171,7 @@ def rk_embedded_pair(s_coefficients, tableau, orders_coefficients):
             # Define a helper function that captures a very common operation in all rk methods
             # namely summing up each value in the input vector interleaved with
             # the s vector. Mathematically speaking we sum
-            # the set [h * c * s_i | (s_i, c_i) ∈ interleave(s, coefficients)]
+            # the set [h * c * s_i | (s_i, c) ∈ interleave(s, coefficients)]
             def slope(coefficients):
                 return sum(h * c * s_i for s_i, c in zip(s, coefficients))
 
